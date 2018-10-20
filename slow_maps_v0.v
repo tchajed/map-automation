@@ -1866,10 +1866,10 @@ Ltac destructE d :=
   | _ => let E := fresh "E" in destruct d eqn: E
   end.
 
-Ltac destruct_one_match_hyporgoal_test check :=
+Ltac destruct_one_match_hyporgoal_test check cleanup :=
   match goal with
   | |- context[match ?d with _ => _ end]      => check d; destructE d
-  | H: context[match ?d with _ => _ end] |- _ => check d; destructE d
+  | H: context[match ?d with _ => _ end] |- _ => check d; destructE d; cleanup H
   end.
 
 Lemma invert_Some_eq_Some: forall (A: Type) (x1 x2: A),
@@ -1879,9 +1879,18 @@ Proof.
   congruence.
 Qed.
 
+Lemma forall_Some_eq_Some : forall A (y z: A),
+    (forall x, Some y = Some x -> Some z = Some x) ->
+    z = y.
+Proof.
+  intros.
+  specialize (H _ eq_refl); inversion H; auto.
+Qed.
+
 Ltac invert_Some_eq_Some :=
   repeat match goal with
          | H: Some ?x1 = Some ?x2 |- _ => apply invert_Some_eq_Some in H; subst x2
+         | H: forall _, Some ?y = Some _ -> Some _ = Some _ |- _ => apply forall_Some_eq_Some in H; subst y
          end.
 
 (* ** ../bedrock2/compiler/src/util/Set.v *)
@@ -2179,15 +2188,19 @@ Hint Unfold extends only_differ agree_on undef_on : unf_map_defs.
 Ltac rew_set_op_map_specs H :=
   let t lemma := rewrite lemma in H in
       repeat match type of H with
-               (* rew_map_specs *)
-             | context[get (remove_key _ _)] => t get_remove_key
-             | context[get (put _ _ _)] => t get_put
-             | context[get (restrict _ _)] => t get_restrict
-             | context[get (intersect_map _ _)] => t get_intersect_map
-             | context[get (remove_keys _ _)] => t get_remove_keys
-             | context[get (remove_by_value _ _)] => t get_remove_by_value
-             | context[get (remove_values _ _)] => t get_remove_values
-             | context[get (update_map _ _)] => t get_update_map
+             (* rew_map_specs *)
+             | context[get ?m] =>
+               is_var m
+               || lazymatch m with
+                 | remove_key _ _ => t get_remove_key
+                 | put _ _ => t get_put
+                 | restrict _ _ => t get_restrict
+                 | intersect_map _ _ => t get_intersect_map
+                 | remove_keys _ _ => t get_remove_keys
+                 | remove_by_value _ _ => t get_remove_by_value
+                 | remove_values _ _ => t get_remove_values
+                 | update_map _ _ => t get_update_map
+                 end
              | context[_ \in domain _] => t domain_spec
              | context[_ \in range _] => t range_spec
 
@@ -2222,7 +2235,7 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  (rew_set_op_map_specs H);
+  try time "rew_set_op_map_specs" progress (rew_set_op_map_specs H);
   try (exists_to_forall H);
   try (specialize (H eq_refl)).
 
@@ -2249,31 +2262,35 @@ Ltac map_solver_should_destruct K V d :=
           end ].
 
 Ltac destruct_one_map_match K V :=
-  destruct_one_match_hyporgoal_test ltac:(map_solver_should_destruct K V).
+  destruct_one_match_hyporgoal_test ltac:(map_solver_should_destruct K V) ltac:(fun H => rew_set_op_map_specs H).
 
 Ltac propositional :=
-  repeat match goal with
+  repeat time "propositional one iter" match goal with
          | |- forall _, _ => intros
          | [ H: _ /\ _ |- _ ] => destruct H
-         | [ H: _ \/ _ |- _ ] => destruct H
          | [ H: _ <-> _ |- _ ] => destruct H
          | [ H: False |- _ ] => solve [ destruct H ]
          | [ H: True |- _ ] => clear H
-         | [ H: ?P -> _, H': ?P |- _ ] =>
-           match type of P with
-           | Prop => specialize (H H')
-           end
          | [ H: exists (varname : _), _ |- _ ] =>
            let newvar := fresh varname in
            destruct H as [newvar ?]
          | [ H: ?P |- ?P ] => exact H
          | |- _ /\ _ => split
-         | |- _ \/ _ => (left + right); congruence
+         | [ H: ?P -> _, H': ?P |- _ ] =>
+           match type of P with
+           | Prop => specialize (H H')
+           end
          | |- _ => progress subst *
          end.
 
+Ltac propositional_ors :=
+  repeat match goal with
+         | [ H: _ \/ _ |- _ ] => destruct H
+         | [ |- _ \/ _ ] => (left + right); congruence
+         end.
+
 Ltac map_solver K V :=
-  (
+  time "preamble" (
   assert_is_type K;
   assert_is_type V;
   repeat autounfold with unf_map_defs unf_set_defs in *;
@@ -2281,7 +2298,7 @@ Ltac map_solver K V :=
   intros;
   repeat autorewrite with rew_set_op_specs rew_map_specs
   );
-  canonicalize_all_map_hyps K V;
+  time "first canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
   repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
@@ -2289,14 +2306,16 @@ Ltac map_solver K V :=
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
+           time "canonicalize_map_hyp in specialize"
                 (canonicalize_map_hyp H'; ensure_new H')
     end
 end;
-let solver := (congruence) || (auto) || ((exfalso; eauto)) in
-(* let intuition_t := intuition solve [ solver ] in *)
-let intuition_t := (propositional); solve [ solver ] in
-let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; (canonicalize_all_map_hyps K V)) in
-  repeat ( intuition_t || fallback).
+let solver := congruence || auto || (exfalso; eauto) in
+let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; try time "last canonicalize_all_map_hyps" progress canonicalize_all_map_hyps K V) in
+repeat (time "propositional" propositional;
+        time "propositional_ors" propositional_ors;
+        try solve [ solver ];
+        try fallback).
 
 Set Printing Width 1000.
 
