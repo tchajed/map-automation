@@ -2176,10 +2176,10 @@ End MapDefinitions.
 
 Hint Unfold extends only_differ agree_on undef_on : unf_map_defs.
 
-Ltac rew_map_specs H :=
+Ltac rew_set_op_map_specs H :=
   let t lemma := rewrite lemma in H in
       repeat match type of H with
-             | context[get empty_map] => t get_empty
+               (* rew_map_specs *)
              | context[get (remove_key _ _)] => t get_remove_key
              | context[get (put _ _ _)] => t get_put
              | context[get (restrict _ _)] => t get_restrict
@@ -2190,6 +2190,13 @@ Ltac rew_map_specs H :=
              | context[get (update_map _ _)] => t get_update_map
              | context[_ \in domain _] => t domain_spec
              | context[_ \in range _] => t range_spec
+
+             (* rew_set_op_specs *)
+             | context[_ \in empty_set] => t empty_set_spec
+             | context[_ \in singleton_set _] => t singleton_set_spec
+             | context[_ \in union _ _] => t union_spec
+             | context[_ \in intersect _ _] => t intersect_spec
+             | context[_ \in diff _ _] => t diff_spec
              end.
 
 Hint Rewrite
@@ -2215,8 +2222,7 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  repeat autorewrite with rew_set_op_specs in H;
-  rew_map_specs H;
+  try time "rew_set_op_map_specs" progress (rew_set_op_map_specs H);
   try (exists_to_forall H);
   try (specialize (H eq_refl)).
 
@@ -2252,7 +2258,7 @@ Ltac map_solver K V :=
   destruct_products;
   intros;
   repeat autorewrite with rew_set_op_specs rew_map_specs;
-  canonicalize_all_map_hyps K V;
+  time "first canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
   repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
@@ -2260,12 +2266,13 @@ Ltac map_solver K V :=
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
-           (canonicalize_map_hyp H';
-           ensure_new H')
+           time "canonicalize_map_hyp in specialize"
+                (canonicalize_map_hyp H'; ensure_new H')
     end
   end;
-  repeat ( ((intuition solve [subst *; auto || congruence || (exfalso; eauto)])) ||
-          ((destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V))).
+let intuition_t := time "subst" (subst *); auto || (time "congruence" congruence) || (exfalso; eauto) in
+  repeat ( ((intuition solve [ intuition_t ])) ||
+           ((destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V))).
 
 Set Printing Width 1000.
 
