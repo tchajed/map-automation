@@ -2272,7 +2272,7 @@ Ltac map_solver K V :=
   end;
 let intuition_t := time "subst" (subst *); auto || (time "congruence" congruence) || (exfalso; eauto) in
   repeat ( ((intuition solve [ intuition_t ])) ||
-           ((destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V))).
+           ((destruct_one_map_match K V; invert_Some_eq_Some; time "last canonicalize_all_map_hyps" canonicalize_all_map_hyps K V))).
 
 Set Printing Width 1000.
 
