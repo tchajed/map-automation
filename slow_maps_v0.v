@@ -130,6 +130,7 @@ Inductive ltac_No_arg : Set :=
 Inductive ltac_Wild : Set :=
   | ltac_wild : ltac_Wild.
 
+Declare Scope ltac_scope.
 Notation "'__'" := ltac_wild : ltac_scope.
 
 (** [ltac_wilds] is another constant that is typically used to
@@ -2208,7 +2209,7 @@ Ltac canonicalize_all_map_hyps K V :=
          end;
   (* TODO we should call this whenever we rewrite with rew_map_specs,
      calling it here is just convenient *)
-  rewrite_get_put K V.
+  time "rewrite_get_put" rewrite_get_put K V.
 
 Ltac map_solver_should_destruct K V d :=
   let T := type of d in
@@ -2230,24 +2231,24 @@ Ltac destruct_one_map_match K V :=
 Ltac map_solver K V :=
   assert_is_type K;
   assert_is_type V;
-  repeat autounfold with unf_map_defs unf_set_defs in *;
-  destruct_products;
+  time "autounfold" repeat autounfold with unf_map_defs unf_set_defs in *;
+  time "destruct products" destruct_products;
   intros;
-  repeat autorewrite with rew_set_op_specs rew_map_specs;
-  canonicalize_all_map_hyps K V;
-  repeat match goal with
+  time "autorewrite" repeat autorewrite with rew_set_op_specs rew_map_specs;
+  time "canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
+  time "canonicalize 2" repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
     match type of H with
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
-           canonicalize_map_hyp H';
-           ensure_new H'
+           time "canonicalize_map_hyp" (canonicalize_map_hyp H';
+           ensure_new H')
     end
   end;
-  repeat ((intuition solve [subst *; auto || congruence || (exfalso; eauto)]) ||
-          (destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V)).
+  repeat ( (time "intuition solve" (intuition solve [subst *; auto || congruence || (exfalso; eauto)])) ||
+          (time "canonicalize finish" (destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V))).
 
 (* ** ../bedrock2/compiler/src/util/MapSolverTest.v *)
 (* Require Import compiler.Decidable. *)
