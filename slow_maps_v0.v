@@ -2251,13 +2251,36 @@ Ltac map_solver_should_destruct K V d :=
 Ltac destruct_one_map_match K V :=
   destruct_one_match_hyporgoal_test ltac:(map_solver_should_destruct K V).
 
+Ltac propositional :=
+  repeat match goal with
+         | |- forall _, _ => intros
+         | [ H: _ /\ _ |- _ ] => destruct H
+         | [ H: _ \/ _ |- _ ] => destruct H
+         | [ H: _ <-> _ |- _ ] => destruct H
+         | [ H: False |- _ ] => solve [ destruct H ]
+         | [ H: True |- _ ] => clear H
+         | [ H: ?P -> _, H': ?P |- _ ] =>
+           match type of P with
+           | Prop => specialize (H H')
+           end
+         | [ H: exists (varname : _), _ |- _ ] =>
+           let newvar := fresh varname in
+           destruct H as [newvar ?]
+         | [ H: ?P |- ?P ] => exact H
+         | |- _ /\ _ => split
+         | |- _ \/ _ => (left + right); congruence
+         | |- _ => progress subst *
+         end.
+
 Ltac map_solver K V :=
+  time "preamble" (
   assert_is_type K;
   assert_is_type V;
   repeat autounfold with unf_map_defs unf_set_defs in *;
   destruct_products;
   intros;
-  repeat autorewrite with rew_set_op_specs rew_map_specs;
+  repeat autorewrite with rew_set_op_specs rew_map_specs
+  );
   time "first canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
   repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
@@ -2269,10 +2292,12 @@ Ltac map_solver K V :=
            time "canonicalize_map_hyp in specialize"
                 (canonicalize_map_hyp H'; ensure_new H')
     end
-  end;
-let intuition_t := time "subst" (subst *); auto || (time "congruence" congruence) || (exfalso; eauto) in
-  repeat ( ((intuition solve [ intuition_t ])) ||
-           ((destruct_one_map_match K V; invert_Some_eq_Some; time "last canonicalize_all_map_hyps" canonicalize_all_map_hyps K V))).
+end;
+let solver := (time "congruence" congruence) || (time "auto" (progress auto)) || (time "exfalso solve" (exfalso; eauto)) in
+(* let intuition_t := intuition solve [ solver ] in *)
+let intuition_t := (time "propositional" propositional); solve [ solver ] in
+let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; try time "last canonicalize_all_map_hyps" progress (canonicalize_all_map_hyps K V)) in
+  repeat ( (time "intuition" intuition_t) || fallback).
 
 Set Printing Width 1000.
 
@@ -2674,7 +2699,6 @@ Section Lemmas.
     Time map_solver K V.
   Qed.
 
-
   (** *** Part 2: False conjectures *)
 
   Goal False. idtac "Part 2a: Small false goals (originally took <5s each)". Abort.
@@ -2726,7 +2750,6 @@ Section Lemmas.
   Proof.
     Time map_solver K V.
   Abort.
-
 
   Goal False. idtac "Part 2c: Large false goals (originally took >50s each)". Abort.
 
