@@ -1,4 +1,4 @@
 .*.aux
 *.glob
 *.vo
-*.txt
+timing-info.txt
