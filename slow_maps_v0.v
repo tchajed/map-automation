@@ -2222,7 +2222,7 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  try time "rew_set_op_map_specs" progress (rew_set_op_map_specs H);
+  (rew_set_op_map_specs H);
   try (exists_to_forall H);
   try (specialize (H eq_refl)).
 
@@ -2273,7 +2273,7 @@ Ltac propositional :=
          end.
 
 Ltac map_solver K V :=
-  time "preamble" (
+  (
   assert_is_type K;
   assert_is_type V;
   repeat autounfold with unf_map_defs unf_set_defs in *;
@@ -2281,7 +2281,7 @@ Ltac map_solver K V :=
   intros;
   repeat autorewrite with rew_set_op_specs rew_map_specs
   );
-  time "first canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
+  canonicalize_all_map_hyps K V;
   repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
@@ -2289,15 +2289,14 @@ Ltac map_solver K V :=
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
-           time "canonicalize_map_hyp in specialize"
                 (canonicalize_map_hyp H'; ensure_new H')
     end
 end;
-let solver := (time "congruence" congruence) || (time "auto" (progress auto)) || (time "exfalso solve" (exfalso; eauto)) in
+let solver := (congruence) || (auto) || ((exfalso; eauto)) in
 (* let intuition_t := intuition solve [ solver ] in *)
-let intuition_t := (time "propositional" propositional); solve [ solver ] in
-let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; try time "last canonicalize_all_map_hyps" progress (canonicalize_all_map_hyps K V)) in
-  repeat ( (time "intuition" intuition_t) || fallback).
+let intuition_t := (propositional); solve [ solver ] in
+let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; (canonicalize_all_map_hyps K V)) in
+  repeat ( intuition_t || fallback).
 
 Set Printing Width 1000.
 
