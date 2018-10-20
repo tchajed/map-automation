@@ -2199,9 +2199,9 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  repeat autorewrite with rew_set_op_specs rew_map_specs in H;
-  try exists_to_forall H;
-  try specialize (H eq_refl).
+  try time "canonicalize_map_hyp autorewrite" (progress repeat autorewrite with rew_set_op_specs rew_map_specs in H);
+  try (time "exists_to_forall" exists_to_forall H);
+  try (time "H eq_refl" specialize (H eq_refl)).
 
 Ltac canonicalize_all_map_hyps K V :=
   repeat match goal with
@@ -2236,19 +2236,21 @@ Ltac map_solver K V :=
   intros;
   time "autorewrite" repeat autorewrite with rew_set_op_specs rew_map_specs;
   time "canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
-  time "canonicalize 2" repeat match goal with
+  repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
     match type of H with
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
-           time "canonicalize_map_hyp" (canonicalize_map_hyp H';
+           time "canonicalize_map_hyp after all" (canonicalize_map_hyp H';
            ensure_new H')
     end
   end;
   repeat ( (time "intuition solve" (intuition solve [subst *; auto || congruence || (exfalso; eauto)])) ||
           (time "canonicalize finish" (destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V))).
+
+Set Printing Width 1000.
 
 (* ** ../bedrock2/compiler/src/util/MapSolverTest.v *)
 (* Require Import compiler.Decidable. *)
