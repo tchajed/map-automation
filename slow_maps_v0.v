@@ -2176,6 +2176,22 @@ End MapDefinitions.
 
 Hint Unfold extends only_differ agree_on undef_on : unf_map_defs.
 
+Ltac rew_map_specs H :=
+  let t lemma := rewrite lemma in H in
+      repeat match type of H with
+             | context[get empty_map] => t get_empty
+             | context[get (remove_key _ _)] => t get_remove_key
+             | context[get (put _ _ _)] => t get_put
+             | context[get (restrict _ _)] => t get_restrict
+             | context[get (intersect_map _ _)] => t get_intersect_map
+             | context[get (remove_keys _ _)] => t get_remove_keys
+             | context[get (remove_by_value _ _)] => t get_remove_by_value
+             | context[get (remove_values _ _)] => t get_remove_values
+             | context[get (update_map _ _)] => t get_update_map
+             | context[_ \in domain _] => t domain_spec
+             | context[_ \in range _] => t range_spec
+             end.
+
 Hint Rewrite
      @get_empty
      @get_remove_key
@@ -2199,7 +2215,8 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  try time "canonicalize_map_hyp autorewrite" (progress repeat autorewrite with rew_set_op_specs rew_map_specs in H);
+  try time "canonicalize_map_hyp autorewrite rew_set_op_specs" (progress repeat autorewrite with rew_set_op_specs in H);
+  try time "canonicalize_map_hyp rew_map_specs" (progress rew_map_specs H);
   try (time "exists_to_forall" exists_to_forall H);
   try (time "H eq_refl" specialize (H eq_refl)).
 
