@@ -2235,7 +2235,7 @@ Ltac rewrite_get_put K V :=
   rewrite? (@get_put K V _ keq) in *.
 
 Ltac canonicalize_map_hyp H :=
-  try time "rew_set_op_map_specs" progress (rew_set_op_map_specs H);
+  rew_set_op_map_specs H;
   try (exists_to_forall H);
   try (specialize (H eq_refl)).
 
@@ -2265,7 +2265,7 @@ Ltac destruct_one_map_match K V :=
   destruct_one_match_hyporgoal_test ltac:(map_solver_should_destruct K V) ltac:(fun H => rew_set_op_map_specs H).
 
 Ltac propositional :=
-  repeat time "propositional one iter" match goal with
+  repeat match goal with
          | |- forall _, _ => intros
          | [ H: _ /\ _ |- _ ] => destruct H
          | [ H: _ <-> _ |- _ ] => destruct H
@@ -2290,15 +2290,13 @@ Ltac propositional_ors :=
          end.
 
 Ltac map_solver K V :=
-  time "preamble" (
   assert_is_type K;
   assert_is_type V;
   repeat autounfold with unf_map_defs unf_set_defs in *;
   destruct_products;
   intros;
-  repeat autorewrite with rew_set_op_specs rew_map_specs
-  );
-  time "first canonicalize_all_map_hyps" canonicalize_all_map_hyps K V;
+  repeat autorewrite with rew_set_op_specs rew_map_specs;
+  canonicalize_all_map_hyps K V;
   repeat match goal with
   | H: forall (x: ?E), _, y: ?E |- _ =>
     first [ unify E K | unify E V ];
@@ -2306,14 +2304,13 @@ Ltac map_solver K V :=
     | DecidableEq E => fail 1
     | _ => let H' := fresh H y in
            pose proof (H y) as H';
-           time "canonicalize_map_hyp in specialize"
-                (canonicalize_map_hyp H'; ensure_new H')
+           (canonicalize_map_hyp H'; ensure_new H')
     end
 end;
 let solver := congruence || auto || (exfalso; eauto) in
-let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; try time "last canonicalize_all_map_hyps" progress canonicalize_all_map_hyps K V) in
-repeat (time "propositional" propositional;
-        time "propositional_ors" propositional_ors;
+let fallback := (destruct_one_map_match K V; invert_Some_eq_Some; canonicalize_all_map_hyps K V) in
+repeat (propositional;
+        propositional_ors;
         try solve [ solver ];
         try fallback).
 
