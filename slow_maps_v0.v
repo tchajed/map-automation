@@ -2190,17 +2190,16 @@ Ltac rew_set_op_map_specs H :=
       repeat match type of H with
              (* rew_map_specs *)
              | context[get ?m] =>
-               is_var m
-               || lazymatch m with
-                 | remove_key _ _ => t get_remove_key
-                 | put _ _ => t get_put
-                 | restrict _ _ => t get_restrict
-                 | intersect_map _ _ => t get_intersect_map
-                 | remove_keys _ _ => t get_remove_keys
-                 | remove_by_value _ _ => t get_remove_by_value
-                 | remove_values _ _ => t get_remove_values
-                 | update_map _ _ => t get_update_map
-                 end
+               lazymatch m with
+               | remove_key _ _ => t get_remove_key
+               | put _ _ => t get_put
+               | restrict _ _ => t get_restrict
+               | intersect_map _ _ => t get_intersect_map
+               | remove_keys _ _ => t get_remove_keys
+               | remove_by_value _ _ => t get_remove_by_value
+               | remove_values _ _ => t get_remove_values
+               | update_map _ _ => t get_update_map
+               end
              | context[_ \in domain _] => t domain_spec
              | context[_ \in range _] => t range_spec
 
